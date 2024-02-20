@@ -27,8 +27,8 @@ def send_email(houses):
     message["To"] = receiver
 
     text = "Nieuwe huizen gevonden! \n\n" + "\n".join(
-        list(map(lambda h: f"{h['title']} - {h['price']} euro - {h['type']} \n {h['link']} ", houses)))
-    plain = MIMEText(text, "plain")
+        list(map(lambda h: f"{h['title']} - {h['price']} euro <br> <img src='{h['image']}'>- {h['type']} \n <a href='{h['link']}'>Link</a> ", houses)))
+    plain = MIMEText(text, "html")
 
     message.attach(plain)
 
@@ -41,12 +41,13 @@ def extract_houses(soup):
     for house in soup.find_all('div', class_='woning'):
         title = house.find('p').text
         full = False
-        if title == 'Bezichtiging vol / Viewing list full':
+        if title == 'Bezichtiging vol / Viewing list full' or 'Verhuurd / Rented out':
             title = house.find_next('p').find_next('p').text
             full = True
         price = house.find('div', class_='gb-container').find_all('p')[1].text
 
         sep = house.find('hr')
+        image = house.find('img')['src']
         type = sep.find_next('p').text
         location = sep.find_next('p').find_next('p').text
         link = house.find('a')['href']
@@ -54,6 +55,7 @@ def extract_houses(soup):
             'title': title,
             'price': price,
             'type': type,
+            'image': image,
             'location': location,
             'link': link,
             'full': full
