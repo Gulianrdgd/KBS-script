@@ -2,6 +2,7 @@ import os
 import random
 import smtplib, ssl
 import requests
+import cssutils
 from bs4 import BeautifulSoup
 import time
 from dotenv import load_dotenv
@@ -27,7 +28,9 @@ def send_email(houses):
     message["To"] = receiver
 
     text = "Nieuwe huizen gevonden! \n\n" + "\n".join(
-        list(map(lambda h: f"{h['title']} - {h['price']} euro <br> <img src='{h['image']}'>- {h['type']} \n <a href='{h['link']}'>Link</a> ", houses)))
+        list(map(lambda h: f"<br/><div>{h['title']} - {h['price']} euro </div><br/><img style='width:300px;height:"
+                           f"200px;background-size: cover;background-position: center;background-repeat: no-repeat;' "
+                           f"src='{h['image']}'> <br/> Type: {h['type']} \n <a href='{h['link']}'>Link</a> <br/>", houses)))
     plain = MIMEText(text, "html")
 
     message.attach(plain)
@@ -36,42 +39,196 @@ def send_email(houses):
         server.login(email, password)
         server.sendmail(email, receiver, message.as_string())
 
-def extract_houses(soup):
+def extract_houses_max(soup):
+    houses = []
+    for house in soup.select('a.relative.flex.flex-col.p-2.bg-ice.group'):
+        try:
+            title = house.find_next('h2').text
+            price = house.find('dd').text.replace('€', '').replace('p/m', '').replace(' ', '').replace(',', '.')
+            location = house.find_next('p').text
+            link = house['href']
+            image = house.find('img')['src']
+            verhuurd = house.select("div.orange.text-ice")
+            full = len(verhuurd) > 0 and verhuurd[0].text == "Verhuurd"
+
+            houses.append({
+                'title': title,
+                'price': price,
+                'type': "unknown",
+                'location': location,
+                'image': image,
+                'full': full,
+                'link': link
+            })
+        except Exception as e:
+            print(e)
+            houses.append({
+                'title': 'unknown',
+                'price': 'unknown',
+                'type': 'unknown',
+                'location': 'unknown',
+                'image': 'unknown',
+                'full': False,
+                'link': 'unknown'
+            })
+    return houses
+
+
+def extract_houses_wouw(soup):
+    houses = []
+    for house in soup.find_all('div', class_='pt-cv-ifield'):
+        try:
+            title = house.find_next('h4').find_next('a').text
+            if len(house.select('div.pt-cv-ctf-prijs')) == 0:
+                continue
+            price = house.find('div', class_="pt-cv-ctf-prijs").find_next('div').text
+            location = 'Nijmegen'
+            link = house.find('a')['href']
+            image = house.find('a').find_next('img')['src']
+            full = house.find('div', class_="pt-cv-ctf-status").find_next('div').text != "Te huur"
+
+            houses.append({
+                'title': title,
+                'price': price,
+                'type': "unknown",
+                'location': location,
+                'image': image,
+                'full': full,
+                'link': link
+            })
+        except Exception as e:
+            print(e)
+            houses.append({
+                'title': 'unknown',
+                'price': 'unknown',
+                'type': 'unknown',
+                'location': 'unknown',
+                'image': 'unknown',
+                'full': False,
+                'link': 'unknown'
+            })
+    return houses
+
+def extract_houses_rotsvast(soup):
+    houses = []
+    for house in soup.find_all('div', class_='residence-gallery'):
+        try:
+            title = house.find('div', class_='residence-street').text + " " + house.find('div', class_='residence-zipcode-place').text
+            status = house.find('div', class_='status').text
+            full = "Verhuurd" in status or status == "Bezichtiging vol"
+
+            price = house.find('div', class_='residence-price').text.replace('€', '').replace('p/mnd', '').replace(' ', '').replace(',', '.').replace('incl.', '').replace('excl.', '').strip()
+            image_style = house.find('div', class_='residence-image')['style']
+            style = cssutils.parseStyle(image_style)
+            image = style['background-image'].replace('url(', '').replace(')', '')
+
+            type = 'Unknown'
+            location = 'Nijmegen'
+            link = house.find('a')['href']
+
+            houses.append({
+                'title': title,
+                'price': price,
+                'type': type,
+                'image': image,
+                'location': location,
+                'link': link,
+                'full': full
+            })
+        except Exception as e:
+            print(e)
+            houses.append({
+                'title': 'unknown',
+                'price': 'unknown',
+                'type': 'unknown',
+                'location': 'unknown',
+                'image': 'unknown',
+                'full': False,
+                'link': 'unknown'
+            })
+    return houses
+
+
+def extract_houses_kbs(soup):
     houses = []
     for house in soup.find_all('div', class_='woning'):
-        title = house.find('p').text
-        full = False
-        if title == 'Bezichtiging vol / Viewing list full' or 'Verhuurd / Rented out':
-            title = house.find_next('p').find_next('p').text
-            full = True
-        price = house.find('div', class_='gb-container').find_all('p')[1].text
+        try:
+            title = house.find('p').text
+            full = False
+            if title == 'Bezichtiging vol / Viewing list full' or 'Verhuurd / Rented out':
+                title = house.find_next('p').find_next('p').text
+                full = True
+            price = house.find('div', class_='gb-container').find_all('p')[1].text
 
-        sep = house.find('hr')
-        image = house.find('img')['src']
-        type = sep.find_next('p').text
-        location = sep.find_next('p').find_next('p').text
-        link = house.find('a')['href']
-        houses.append({
-            'title': title,
-            'price': price,
-            'type': type,
-            'image': image,
-            'location': location,
-            'link': link,
-            'full': full
-        })
+            sep = house.find('hr')
+            image = house.find('img')['src']
+            type = sep.find_next('p').text
+            location = sep.find_next('p').find_next('p').text
+            link = house.find('a')['href']
+            houses.append({
+                'title': title,
+                'price': price,
+                'type': type,
+                'image': image,
+                'location': location,
+                'link': link,
+                'full': full
+            })
+        except Exception as e:
+            print(e)
+            houses.append({
+                'title': 'unknown',
+                'price': 'unknown',
+                'type': 'unknown',
+                'location': 'unknown',
+                'image': 'unknown',
+                'full': False,
+                'link': 'unknown'
+            })
     return houses
 
 
 
 def main():
     old_houses = {}
+    url_kbs = "https://kbsvastgoedbeheer.nl/aanbod/"
+    url_max = ("https://mvxvastgoedbeheer.nl/aanbod?city=&type_of_house=Studio&minimum_price=0&maximum_price=900"
+               "&amount_of_rooms=&status=&square_meters=&amount_of_sleeping_rooms=&amount_of_bathrooms=&garden"
+               "=&balcony=&salvage=&parking_available=&sort-by=price-ascending")
+    url_wouw = 'https://www.vdwouwvastgoedbeheer.nl/aanbod/'
+    url_rotsvast = 'https://www.rotsvast.nl/woningaanbod/rotsvast-nijmegen/?type=2&office=RV013&maximumPrice[2]=900'
 
     while(True):
-        url = "https://kbsvastgoedbeheer.nl/aanbod/"
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        houses = extract_houses(soup)
+        houses = []
+
+        try:
+            response = requests.get(url_kbs)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            houses += extract_houses_kbs(soup)
+        except Exception as e:
+            print(e)
+
+        try:
+            response = requests.get(url_max)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            houses += extract_houses_max(soup)
+        except Exception as e:
+            print(e)
+
+        try:
+            response = requests.get(url_wouw)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            houses += extract_houses_wouw(soup)
+        except Exception as e:
+            print(e)
+
+        try:
+            response = requests.get(url_rotsvast)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            houses += extract_houses_rotsvast(soup)
+        except Exception as e:
+            print(e)
+
 
         houses = list(filter(lambda x: not x['full'] and 'Nijmegen' in x['location'] and float(x['price']) < 900, houses))
         print(houses)
