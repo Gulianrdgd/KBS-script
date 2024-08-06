@@ -239,6 +239,93 @@ def extract_houses_kbs(soup):
     return houses
 
 
+def extract_houses_hans_janssen(soup):
+    houses = []
+    for house in soup.find_all('div', class_='js-house-item'):
+        try:
+            title = house.find('div', class_='card-house__title').find_next('h6').text
+            full = house.find('div', class_='card-house__label')
+
+            if full is not None:
+                full = full.text == 'Verhuurd'
+            else:
+                full = False
+
+            price = house.find('div', class_='card-house__price').text
+            price = price.replace('€', '').replace('per maand', '').replace(' ', '').replace(',', '').replace('-', '').replace('.', '', price.count('.') - 1).strip()
+            image = house.find('img')['src']
+            link = house.find_next('a')['href']
+
+            type = 'Unknown'
+            location = 'Nijmegen'
+
+            houses.append({
+                'title': title,
+                'price': price,
+                'type': type,
+                'image': image,
+                'location': location,
+                'link': link,
+                'full': full
+            })
+        except Exception as e:
+            print(e)
+            houses.append({
+                'title': 'unknown',
+                'price': 'unknown',
+                'type': 'unknown',
+                'location': 'unknown',
+                'image': 'unknown',
+                'full': False,
+                'link': 'unknown'
+            })
+    return houses
+
+def extract_houses_stmakelaars(soup):
+    houses = []
+    for house in soup.find_all('div', class_='card--object'):
+        try:
+            title = house.find_next('h5').text
+            full = house.find_next('span')
+
+
+            print(title)
+
+            if full is not None:
+                full = full.text == 'Verhuurd'
+            else:
+                full = False
+
+            price = house.find_next('strong').text
+            price = price.replace('€', '').split('p.m.')[0].replace(' ', '').replace(',', '').replace('-', '').replace('.', '', price.count('.') - 1).strip()
+            image = house.find('img')['src']
+            link = house.find_next('a')['href']
+
+            print(full, price, image, link)
+            type = 'Unknown'
+            location = 'Nijmegen'
+
+            houses.append({
+                'title': title,
+                'price': price,
+                'type': type,
+                'image': image,
+                'location': location,
+                'link': link,
+                'full': full
+            })
+        except Exception as e:
+            print(e)
+            houses.append({
+                'title': 'unknown',
+                'price': 'unknown',
+                'type': 'unknown',
+                'location': 'unknown',
+                'image': 'unknown',
+                'full': False,
+                'link': 'unknown'
+            })
+    return houses
 
 def main():
     old_houses = {}
@@ -249,6 +336,8 @@ def main():
     url_wouw = 'https://www.vdwouwvastgoedbeheer.nl/aanbod/'
     url_rotsvast = 'https://www.rotsvast.nl/woningaanbod/rotsvast-nijmegen/?type=2&office=RV013&maximumPrice[2]=900'
     url_nederwoon = "https://www.nederwoon.nl/search?search_type=&type=&rooms=&completion=&sort=1&city=Nijmegen"
+    url_hans_janssen = "https://www.hansjanssen.nl/wonen/zoeken/Nijmegen/huur/"
+    url_stmakelaars = "https://stmakelaars.nl/wonen/aanbod?buy_rent=rent&distance=5&search=Nijmegen&order_by=created_at-desc&page=1"
 
     while(True):
         houses = []
@@ -285,6 +374,13 @@ def main():
             response = requests.get(url_nederwoon)
             soup = BeautifulSoup(response.text, 'html.parser')
             houses += extract_houses_nederwoon(soup)
+        except Exception as e:
+            print(e)
+
+        try:
+            response = requests.get(url_hans_janssen)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            houses += extract_houses_hans_janssen(soup)
         except Exception as e:
             print(e)
 
