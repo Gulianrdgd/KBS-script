@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 
 load_dotenv()
 
-def send_email(houses):
+def send_email(houses, receiver):
 
     port = 465  # For SSL
 
@@ -20,7 +20,6 @@ def send_email(houses):
 
     email = os.getenv('GMAIL_USERNAME')
     password = os.getenv('GMAIL_PASS')
-    receiver = os.getenv('RECEIVER_EMAIL')
 
     message = MIMEMultipart("alternative")
     message["Subject"] = "Nieuwe kamers!"
@@ -92,7 +91,7 @@ def extract_houses_nederwoon(soup):
 
             location = 'Nijmegen'
 
-            link = text_block[0].find_next('a')['href']
+            link = 'https://www.nederwoon.nl' + text_block[0].find_next('a')['href']
             image = 'https://www.nederwoon.nl' + house.find_next('img')['data-src']
             full = False
 
@@ -245,63 +244,20 @@ def extract_houses_hans_janssen(soup):
         try:
             title = house.find('div', class_='card-house__title').find_next('h6').text
             full = house.find('div', class_='card-house__label')
-
             if full is not None:
-                full = full.text == 'Verhuurd'
+                full = full.text.strip() == 'Verhuurd'
             else:
                 full = False
 
             price = house.find('div', class_='card-house__price').text
-            price = price.replace('€', '').replace('per maand', '').replace(' ', '').replace(',', '').replace('-', '').replace('.', '', price.count('.') - 1).strip()
-            image = house.find('img')['src']
-            link = house.find_next('a')['href']
+            price = price.replace('€', '').replace('per maand', '').replace(' ', '').replace(',', '').replace('-', '').replace('.', '').strip()
+            image = 'https://www.hansjanssen.nl' + house.find_all('img')[1]['src']
 
-            type = 'Unknown'
-            location = 'Nijmegen'
-
-            houses.append({
-                'title': title,
-                'price': price,
-                'type': type,
-                'image': image,
-                'location': location,
-                'link': link,
-                'full': full
-            })
-        except Exception as e:
-            print(e)
-            houses.append({
-                'title': 'unknown',
-                'price': 'unknown',
-                'type': 'unknown',
-                'location': 'unknown',
-                'image': 'unknown',
-                'full': False,
-                'link': 'unknown'
-            })
-    return houses
-
-def extract_houses_stmakelaars(soup):
-    houses = []
-    for house in soup.find_all('div', class_='card--object'):
-        try:
-            title = house.find_next('h5').text
-            full = house.find_next('span')
-
-
-            print(title)
-
-            if full is not None:
-                full = full.text == 'Verhuurd'
+            if not full:
+                link = house.find_next('a')['href']
             else:
-                full = False
+                link = 'unknown'
 
-            price = house.find_next('strong').text
-            price = price.replace('€', '').split('p.m.')[0].replace(' ', '').replace(',', '').replace('-', '').replace('.', '', price.count('.') - 1).strip()
-            image = house.find('img')['src']
-            link = house.find_next('a')['href']
-
-            print(full, price, image, link)
             type = 'Unknown'
             location = 'Nijmegen'
 
@@ -315,7 +271,6 @@ def extract_houses_stmakelaars(soup):
                 'full': full
             })
         except Exception as e:
-            print(e)
             houses.append({
                 'title': 'unknown',
                 'price': 'unknown',
@@ -326,6 +281,19 @@ def extract_houses_stmakelaars(soup):
                 'link': 'unknown'
             })
     return houses
+
+def filter_per_person(houses, location, price, email, old_houses):
+    houses_per_person =  list(filter(lambda x: not x['full'] and location in x['location'] and float(x['price']) < price, houses))
+
+    houses_ready_to_email = []
+
+    for house in houses_per_person:
+        if not (house['link'] in old_houses):
+            print("Not in!")
+            houses_ready_to_email.append(house)
+
+    if len(houses_ready_to_email) > 0:
+        send_email(houses_ready_to_email, email)
 
 def main():
     old_houses = {}
@@ -337,7 +305,19 @@ def main():
     url_rotsvast = 'https://www.rotsvast.nl/woningaanbod/rotsvast-nijmegen/?type=2&office=RV013&maximumPrice[2]=900'
     url_nederwoon = "https://www.nederwoon.nl/search?search_type=&type=&rooms=&completion=&sort=1&city=Nijmegen"
     url_hans_janssen = "https://www.hansjanssen.nl/wonen/zoeken/Nijmegen/huur/"
-    url_stmakelaars = "https://stmakelaars.nl/wonen/aanbod?buy_rent=rent&distance=5&search=Nijmegen&order_by=created_at-desc&page=1"
+
+    # Should be changed to the actual searchers
+    searchers = [{
+        "email": "test@test.com",
+        "location": "Nijmegen",
+        "price": 900
+    },
+        {
+            "email": "test2@test.com",
+            "location": "Nijmegen",
+            "price": 500
+        },
+    ]
 
     while(True):
         houses = []
@@ -384,21 +364,12 @@ def main():
         except Exception as e:
             print(e)
 
-
-        houses = list(filter(lambda x: not x['full'] and 'Nijmegen' in x['location'] and float(x['price']) < 900, houses))
         print(houses)
 
-        houses_ready_to_email = []
+        for searcher in searchers:
+            filter_per_person(houses, searcher['location'], searcher['price'], searcher['email'], old_houses)
 
-        for house in houses:
-            if not (house['link'] in old_houses):
-                print("Not in!")
-                houses_ready_to_email.append(house)
-                old_houses[house['link']] = house
-
-        if len(houses_ready_to_email) > 0:
-            send_email(houses_ready_to_email)
-
+        old_houses = list(map(lambda x: x['link'], houses))
         print(old_houses)
 
         time.sleep(300 + random.randint(0, 100))
