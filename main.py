@@ -1,6 +1,9 @@
 import os
+import pickle
 import random
 import smtplib, ssl
+from types import NoneType
+
 import requests
 import cssutils
 from bs4 import BeautifulSoup
@@ -282,6 +285,56 @@ def extract_houses_hans_janssen(soup):
             })
     return houses
 
+
+def extract_houses_dolfijn(soup):
+    houses = []
+
+    for house in soup.find_all('article', class_='objectcontainer'):
+        try:
+
+            data_short = house.find('div', class_='datashort')
+
+            title = data_short.find('span', class_='street').text
+            location = data_short.find('span', class_='location').text
+
+            status = house.find('span', class_='object_status')
+            if status is not None:
+                full = status.text.strip() == 'Verhuurd'
+            else:
+                full = False
+
+            if not full:
+                price = data_short.find('span', class_='obj_price').text.replace('€', '').replace(',-','').replace('/mnd', '').replace('p/m', '').replace(' ', '').replace(',', '.').replace('excl.', '').replace('incl.', '').strip()
+                price = price.replace('.', '', price.count('.') - 1)
+            else:
+                price = None
+
+            image = house.find('img')['src']
+            link = 'https://dolfijnwonen.nl' + house.find('a')['href']
+
+            houses.append({
+                'title': title,
+                'price': price,
+                'type': 'Unknown',
+                'image': image,
+                'location': location,
+                'link': link,
+                'full': full
+            })
+        except Exception as e:
+            print(e)
+            houses.append({
+                'title': 'unknown',
+                'price': 'unknown',
+                'type': 'unknown',
+                'location': 'unknown',
+                'image': 'unknown',
+                'full': False,
+                'link': 'unknown'
+            })
+    return houses
+
+
 def filter_per_person(houses, location, price, email, old_houses):
     houses_per_person =  list(filter(lambda x: not x['full'] and location in x['location'] and float(x['price']) < price, houses))
 
@@ -297,6 +350,11 @@ def filter_per_person(houses, location, price, email, old_houses):
 
 def main():
     old_houses = {}
+
+    if os.path.exists('old_houses.pkl'):
+        with open('old_houses.pkl', 'rb') as f:
+            old_houses = pickle.load(f)
+
     url_kbs = "https://kbsvastgoedbeheer.nl/aanbod/"
     url_max = ("https://mvxvastgoedbeheer.nl/aanbod?city=&type_of_house=Studio&minimum_price=0&maximum_price=900"
                "&amount_of_rooms=&status=&square_meters=&amount_of_sleeping_rooms=&amount_of_bathrooms=&garden"
@@ -305,6 +363,7 @@ def main():
     url_rotsvast = 'https://www.rotsvast.nl/woningaanbod/rotsvast-nijmegen/?type=2&office=RV013&maximumPrice[2]=900'
     url_nederwoon = "https://www.nederwoon.nl/search?search_type=&type=&rooms=&completion=&sort=1&city=Nijmegen"
     url_hans_janssen = "https://www.hansjanssen.nl/wonen/zoeken/Nijmegen/huur/"
+    url_dolfijn = "https://dolfijnwonen.nl/woningaanbod/huur"
 
     # Should be changed to the actual searchers
     searchers = [{
@@ -364,6 +423,13 @@ def main():
         except Exception as e:
             print(e)
 
+        try:
+            response = requests.get(url_dolfijn)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            houses += extract_houses_dolfijn(soup)
+        except Exception as e:
+            print(e)
+
         print(houses)
 
         for searcher in searchers:
@@ -371,6 +437,9 @@ def main():
 
         old_houses = list(map(lambda x: x['link'], houses))
         print(old_houses)
+
+        with open('old_houses.pkl', 'wb') as f:
+            pickle.dump(old_houses, f)
 
         time.sleep(300 + random.randint(0, 100))
 
