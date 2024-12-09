@@ -1,9 +1,11 @@
 import os
 import pickle
 import random
+import smtplib
 import ssl
 import time
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 import cssutils
 import requests
@@ -61,13 +63,13 @@ def send_email(houses: list[House], receiver):
         list(map(lambda h: h.to_html(), houses)))
 
     print("SENDING EMAIL:", text)
-    # plain = MIMEText(text, "html")
-    #
-    # message.attach(plain)
-    #
-    # with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
-    #     server.login(email, password)
-    #     server.sendmail(email, receiver, message.as_string())
+    plain = MIMEText(text, "html")
+
+    message.attach(plain)
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
+        server.login(email, password)
+        server.sendmail(email, receiver, message.as_string())
 
 
 def extract_house_mvx(house) -> House:
